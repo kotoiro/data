@@ -1,0 +1,69 @@
+name: Snapshot
+
+# Fetches the upstream data Kotoiro's built-in dictionaries are built from, and publishes it
+# unchanged as a release named after the day's JMdict: upstream-YYYY.MM.DD. JMdict's licence asks
+# apps that carry it to update it regularly, so this runs every month, and by hand.
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+
+permissions:
+  contents: write
+
+env:
+  # JMdict, English only. The EDRDG publishes a new file at this one URL every day and keeps no
+  # older ones, so it can't be pinned: each release is the record of one day's file.
+  JMDICT_URL: https://www.edrdg.org/pub/Nihongo/JMdict_e.gz
+  # Open English WordNet, pinned by edition and SHA-256. A new edition gets a new pin.
+  WORDNET_URL: https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.xml.gz
+  WORDNET_SHA256: 9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe
+
+jobs:
+  snapshot:
+    name: Fetch and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch
+        run: |
+          mkdir out
+          cd out
+          ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+          wordnet=${WORDNET_URL##*/}
+          curl -fsSL --retry 3 -A "$ua" -o JMdict_e.gz "$JMDICT_URL"
+          curl -fsSL --retry 3 -A "$ua" -o "$wordnet" "$WORDNET_URL"
+          echo "$WORDNET_SHA256  $wordnet" | sha256sum -c -
+          gzip -t JMdict_e.gz "$wordnet"
+          sha256sum JMdict_e.gz "$wordnet" > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          created=$(gzip -dc out/JMdict_e.gz | grep -m1 -o 'JMdict created: [0-9-]*' | cut -d' ' -f3)
+          if [ -z "$created" ]; then
+            echo "JMdict_e.gz says nothing of when it was created" >&2
+            exit 1
+          fi
+          tag=upstream-$(echo "$created" | tr - .)
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag is published already: nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat > notes.md <<EOF
+          Each upstream file, unchanged:
+
+          - \`JMdict_e.gz\`: JMdict of $created, English only, the property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/), [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
+          - \`${WORDNET_URL##*/}\`: [Open English WordNet](https://github.com/globalwordnet/english-wordnet), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+          \`\`\`
+          $(cat out/SHA256SUMS)
+          \`\`\`
+          EOF
+          gh release create "$tag" out/* --repo "$GITHUB_REPOSITORY" \
+            --title "Upstream data of $created" --notes-file notes.md
+          { echo "Published $tag:"; echo '```'; cat out/SHA256SUMS; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
