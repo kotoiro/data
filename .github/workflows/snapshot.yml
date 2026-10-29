@@ -25,6 +25,10 @@ env:
   # frequencies (dict/cntlist.rev), which Open English WordNet doesn't have.
   PRINCETON_URL: https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz
   PRINCETON_SHA256: 3f7d8be8ef6ecc7167d39b10d66954ec734280b5bdcd57f7d9eafe429d11c22a
+  # Jiten's global frequency list, for how common each word is, which JMdict tags only coarsely.
+  # Jiten serves its current list at this one URL and keeps no older ones, so like JMdict it can't
+  # be pinned.
+  JITEN_URL: https://api.jiten.moe/api/frequency-list/download?downloadType=csv
 
 jobs:
   snapshot:
@@ -42,10 +46,16 @@ jobs:
           curl -fsSL --retry 3 -A "$ua" -o JMdict_e.gz "$JMDICT_URL"
           curl -fsSL --retry 3 -A "$ua" -o "$wordnet" "$WORDNET_URL"
           curl -fsSL --retry 3 -A "$ua" -o "$princeton" "$PRINCETON_URL"
+          curl -fsSL --retry 3 -A "$ua" -o jiten_freq_global.csv "$JITEN_URL"
           echo "$WORDNET_SHA256  $wordnet" | sha256sum -c -
           echo "$PRINCETON_SHA256  $princeton" | sha256sum -c -
           gzip -t JMdict_e.gz "$wordnet" "$princeton"
-          sha256sum JMdict_e.gz "$wordnet" "$princeton" > SHA256SUMS
+          # Jiten's list has no SHA-256 to check, but its header shows it is the list.
+          if [ "$(head -n1 jiten_freq_global.csv | tr -d '\r')" != 'Word,Form,Rank' ]; then
+            echo "jiten_freq_global.csv doesn't start with Jiten's header" >&2
+            exit 1
+          fi
+          sha256sum JMdict_e.gz "$wordnet" "$princeton" jiten_freq_global.csv > SHA256SUMS
 
       - name: Publish
         env:
@@ -67,6 +77,7 @@ jobs:
           - \`JMdict_e.gz\`: JMdict of $created, English only, the property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/), [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
           - \`${WORDNET_URL##*/}\`: [Open English WordNet](https://github.com/globalwordnet/english-wordnet), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
           - \`${PRINCETON_URL##*/}\`: [Princeton WordNet](https://wordnet.princeton.edu/) 3.1, © 2011 Princeton University, under the [WordNet licence](https://wordnet.princeton.edu/license-and-commercial-use), which heads each of its files
+          - \`jiten_freq_global.csv\`: [Jiten](https://jiten.moe/frequency-dictionaries)'s global frequency list of $(date -u +%F), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
           \`\`\`
           $(cat out/SHA256SUMS)
