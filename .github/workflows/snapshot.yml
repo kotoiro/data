@@ -21,6 +21,10 @@ env:
   # Open English WordNet, pinned by edition and SHA-256. A new edition gets a new pin.
   WORDNET_URL: https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.xml.gz
   WORDNET_SHA256: 9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe
+  # Princeton WordNet 3.1, its last release, pinned by SHA-256. Kotoiro reads only its sense
+  # frequencies (dict/cntlist.rev), which Open English WordNet doesn't have.
+  PRINCETON_URL: https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz
+  PRINCETON_SHA256: 3f7d8be8ef6ecc7167d39b10d66954ec734280b5bdcd57f7d9eafe429d11c22a
 
 jobs:
   snapshot:
@@ -34,11 +38,14 @@ jobs:
           cd out
           ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
           wordnet=${WORDNET_URL##*/}
+          princeton=${PRINCETON_URL##*/}
           curl -fsSL --retry 3 -A "$ua" -o JMdict_e.gz "$JMDICT_URL"
           curl -fsSL --retry 3 -A "$ua" -o "$wordnet" "$WORDNET_URL"
+          curl -fsSL --retry 3 -A "$ua" -o "$princeton" "$PRINCETON_URL"
           echo "$WORDNET_SHA256  $wordnet" | sha256sum -c -
-          gzip -t JMdict_e.gz "$wordnet"
-          sha256sum JMdict_e.gz "$wordnet" > SHA256SUMS
+          echo "$PRINCETON_SHA256  $princeton" | sha256sum -c -
+          gzip -t JMdict_e.gz "$wordnet" "$princeton"
+          sha256sum JMdict_e.gz "$wordnet" "$princeton" > SHA256SUMS
 
       - name: Publish
         env:
@@ -59,6 +66,7 @@ jobs:
 
           - \`JMdict_e.gz\`: JMdict of $created, English only, the property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/), [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
           - \`${WORDNET_URL##*/}\`: [Open English WordNet](https://github.com/globalwordnet/english-wordnet), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+          - \`${PRINCETON_URL##*/}\`: [Princeton WordNet](https://wordnet.princeton.edu/) 3.1, © 2011 Princeton University, under the [WordNet licence](https://wordnet.princeton.edu/license-and-commercial-use), which heads each of its files
 
           \`\`\`
           $(cat out/SHA256SUMS)
