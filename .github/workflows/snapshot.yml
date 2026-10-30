@@ -1,8 +1,9 @@
 name: Snapshot
 
-# Fetches the upstream data Kotoiro's built-in dictionaries are built from, and publishes it
-# unchanged as a release named after the day's JMdict: upstream-YYYY.MM.DD. JMdict's licence asks
-# apps that carry it to update it regularly, so this runs every month, and by hand.
+# Fetches the upstream data Kotoiro's built-in dictionaries and word data are built from, and
+# publishes it unchanged, or derived where it can't be kept as it is, as a release named after the
+# day's JMdict: upstream-YYYY.MM.DD. JMdict's licence asks apps that carry it to update it
+# regularly, so this runs every month, and by hand.
 on:
   schedule:
     - cron: '17 3 1 * *'
@@ -14,21 +15,37 @@ concurrency:
 permissions:
   contents: write
 
+# Every file but JMdict's and Jiten's is pinned by its SHA-256 in pinned.sha256, under the name it
+# is released as. A new version gets a new pin.
 env:
   # JMdict, English only. The EDRDG publishes a new file at this one URL every day and keeps no
   # older ones, so it can't be pinned: each release is the record of one day's file.
   JMDICT_URL: https://www.edrdg.org/pub/Nihongo/JMdict_e.gz
-  # Open English WordNet, pinned by edition and SHA-256. A new edition gets a new pin.
+  # Open English WordNet, pinned by edition.
   WORDNET_URL: https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.xml.gz
-  WORDNET_SHA256: 9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe
-  # Princeton WordNet 3.1, its last release, pinned by SHA-256. Kotoiro reads only its sense
-  # frequencies (dict/cntlist.rev), which Open English WordNet doesn't have.
+  # Princeton WordNet 3.1, its last release. Kotoiro reads only its sense frequencies
+  # (dict/cntlist.rev), which Open English WordNet doesn't have.
   PRINCETON_URL: https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz
-  PRINCETON_SHA256: 3f7d8be8ef6ecc7167d39b10d66954ec734280b5bdcd57f7d9eafe429d11c22a
   # Jiten's global frequency list, for how common each word is, which JMdict tags only coarsely.
   # Jiten serves its current list at this one URL and keeps no older ones, so like JMdict it can't
   # be pinned.
   JITEN_URL: https://api.jiten.moe/api/frequency-list/download?downloadType=csv
+  # wordfreq 3.2, its last release: how common each English and Chinese spelling is, and the
+  # table it maps traditional Chinese to simplified with, since it counts only simplified.
+  WORDFREQ_URL: https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data
+  # Lancaster's BNC lemma list: English counted by Headword and part of speech, which shares out
+  # wordfreq's count of a spelling among the words it can be.
+  BNC_URL: https://ucrel.lancs.ac.uk/bncfreq/lists/1_1_all_fullalpha.zip
+  # The CEFR-J Wordlist 1.6. Its terms allow making another word list from it but don't mention
+  # redistribution, so a release holds only the list scripts/cefrj.py derives from it.
+  CEFRJ_URL: https://www.cefr-j.org/data/CEFRJ_wordlist_ver1.6.zip
+  # Octanove's C1 and C2 words, which carry on where CEFR-J stops, pinned by commit.
+  OCTANOVE_URL: https://raw.githubusercontent.com/openlanguageprofiles/olp-en-cefrj/d4e45b75b38f27b30dfc5c44d8c571aec7e7092f/octanove-vocabulary-profile-c1c2-1.0.csv
+  # Jonathan Waller's JLPT lists, with the JMdict entry number of each word, pinned by commit.
+  # Released as jlpt-n5.csv to jlpt-n1.csv.
+  JLPT_URL: https://raw.githubusercontent.com/stephenmk/yomitan-jlpt-vocab/b062d4e38c4bdd0950ae1d4ec55f04b176182e03/original_data
+  # The NGSL family's word lists, NGSL 1.2, NAWL 1.2, TSL 1.2 and BSL 1.20.
+  NGSL_URL: https://www.newgeneralservicelist.com/s
 
 jobs:
   snapshot:
@@ -36,26 +53,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v7
+
       - name: Fetch
         run: |
           mkdir out
           cd out
           ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+          fetch() { curl -fsSL --retry 3 -A "$ua" -o "$1" "$2"; }
           wordnet=${WORDNET_URL##*/}
           princeton=${PRINCETON_URL##*/}
-          curl -fsSL --retry 3 -A "$ua" -o JMdict_e.gz "$JMDICT_URL"
-          curl -fsSL --retry 3 -A "$ua" -o "$wordnet" "$WORDNET_URL"
-          curl -fsSL --retry 3 -A "$ua" -o "$princeton" "$PRINCETON_URL"
-          curl -fsSL --retry 3 -A "$ua" -o jiten_freq_global.csv "$JITEN_URL"
-          echo "$WORDNET_SHA256  $wordnet" | sha256sum -c -
-          echo "$PRINCETON_SHA256  $princeton" | sha256sum -c -
-          gzip -t JMdict_e.gz "$wordnet" "$princeton"
+          cefrj=${CEFRJ_URL##*/}
+          fetch JMdict_e.gz "$JMDICT_URL"
+          fetch "$wordnet" "$WORDNET_URL"
+          fetch "$princeton" "$PRINCETON_URL"
+          fetch jiten_freq_global.csv "$JITEN_URL"
+          for list in large_en large_zh _chinese_mapping; do
+            fetch "$list.msgpack.gz" "$WORDFREQ_URL/$list.msgpack.gz"
+          done
+          fetch "${BNC_URL##*/}" "$BNC_URL"
+          fetch "$cefrj" "$CEFRJ_URL"
+          fetch "${OCTANOVE_URL##*/}" "$OCTANOVE_URL"
+          for level in 5 4 3 2 1; do
+            fetch "jlpt-n$level.csv" "$JLPT_URL/n$level.csv"
+          done
+          for list in NGSL_12_stats NAWL_12_lemmatized_for_teaching TSL_12_stats BSL_120_stats; do
+            fetch "$list.csv" "$NGSL_URL/$list.csv"
+          done
+          sha256sum -c --quiet ../pinned.sha256
+          gzip -t JMdict_e.gz
           # Jiten's list has no SHA-256 to check, but its header shows it is the list.
           if [ "$(head -n1 jiten_freq_global.csv | tr -d '\r')" != 'Word,Form,Rank' ]; then
             echo "jiten_freq_global.csv doesn't start with Jiten's header" >&2
             exit 1
           fi
-          sha256sum JMdict_e.gz "$wordnet" "$princeton" jiten_freq_global.csv > SHA256SUMS
+          python3 -I ../scripts/cefrj.py "$cefrj" > cefrj-1.6.tsv
+          mv "$cefrj" ..
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS .
 
       - name: Publish
         env:
@@ -71,13 +106,21 @@ jobs:
             echo "$tag is published already: nothing to do." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          cefrj=${CEFRJ_URL##*/}
           cat > notes.md <<EOF
-          Each upstream file, unchanged:
+          Each upstream file, unchanged but for one derived list:
 
           - \`JMdict_e.gz\`: JMdict of $created, English only, the property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/), [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
           - \`${WORDNET_URL##*/}\`: [Open English WordNet](https://github.com/globalwordnet/english-wordnet), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
           - \`${PRINCETON_URL##*/}\`: [Princeton WordNet](https://wordnet.princeton.edu/) 3.1, © 2011 Princeton University, under the [WordNet licence](https://wordnet.princeton.edu/license-and-commercial-use), which heads each of its files
           - \`jiten_freq_global.csv\`: [Jiten](https://jiten.moe/frequency-dictionaries)'s global frequency list of $(date -u +%F), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`large_en.msgpack.gz\`, \`large_zh.msgpack.gz\`, \`_chinese_mapping.msgpack.gz\`: [wordfreq](https://github.com/rspeer/wordfreq) 3.2's data by Robyn Speer, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`${BNC_URL##*/}\`: the BNC lemma list of Leech, Rayson and Wilson, *Word Frequencies in Written and Spoken English* (2001), from [Lancaster](https://ucrel.lancs.ac.uk/bncfreq/flists.html), [CC BY-SA 2.0 UK](https://creativecommons.org/licenses/by-sa/2.0/uk/)
+          - \`cefrj-1.6.tsv\`: derived from the CEFR-J Wordlist Version 1.6, compiled by Yukio Tono, Tokyo University of Foreign Studies: each word's Headword, part of speech and CEFR level, under [its terms](https://www.cefr-j.org/download.html). From \`$cefrj\`, $CEFRJ_URL, SHA-256 $(grep " $cefrj\$" pinned.sha256 | cut -d' ' -f1)
+          - \`${OCTANOVE_URL##*/}\`: the [Octanove Vocabulary Profile C1/C2](https://github.com/openlanguageprofiles/olp-en-cefrj) 1.0 by Octanove Labs, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`jlpt-n5.csv\` to \`jlpt-n1.csv\`: [Jonathan Waller](http://www.tanos.co.uk/jlpt/)'s JLPT lists, under Creative Commons BY, with JMdict entry numbers by [stephenmk/yomitan-jlpt-vocab](https://github.com/stephenmk/yomitan-jlpt-vocab), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`NGSL_12_stats.csv\`, \`NAWL_12_lemmatized_for_teaching.csv\`: the [New General Service List](https://www.newgeneralservicelist.com/new-general-service-list) and the [New Academic Word List](https://www.newgeneralservicelist.com/new-academic-word-list) 1.2 by Browne, C., Culligan, B., and Phillips, J., [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`TSL_12_stats.csv\`, \`BSL_120_stats.csv\`: the [TOEIC Service List](https://www.newgeneralservicelist.com/toeic-service-list) 1.2 and the [Business Service List](https://www.newgeneralservicelist.com/business-service-list) 1.20 by Browne, C. and Culligan, B., [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
           \`\`\`
           $(cat out/SHA256SUMS)
