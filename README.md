@@ -21,9 +21,12 @@ Each release, `upstream-YYYY.MM.DD`, is named after the day's JMdict it holds, a
 | `octanove-vocabulary-profile-c1c2-1.0.csv` | The [Octanove Vocabulary Profile C1/C2](https://github.com/openlanguageprofiles/olp-en-cefrj) 1.0: words at C1 and C2 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | `jlpt-n5.csv` to `jlpt-n1.csv` | Jonathan Waller's JLPT lists, with each word's JMdict entry number, from [stephenmk/yomitan-jlpt-vocab](https://github.com/stephenmk/yomitan-jlpt-vocab)'s `original_data/n5.csv` to `n1.csv` | Waller's: Creative Commons BY; the entry numbers: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | `NGSL_12_stats.csv`, `NAWL_12_lemmatized_for_teaching.csv`, `TSL_12_stats.csv`, `BSL_120_stats.csv` | The [NGSL family](https://www.newgeneralservicelist.com/word-lists)'s word lists: the New General Service List 1.2, the New Academic Word List 1.2, the TOEIC Service List 1.2 and the Business Service List 1.20 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| `cedict_1_0_ts_utf-8_mdbg.txt.gz` | [CC-CEDICT](https://cc-cedict.org/wiki/), Chinese to English, as MDBG published it that day | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| `Unihan.zip` | The [Unihan database](https://www.unicode.org/reports/tr38/) of Unicode 18.0.0: for how often each reading of a Chinese character is used, and its usual reading, which choose the first of CC-CEDICT's entries for a character | [Unicode License v3](https://www.unicode.org/license.txt) |
+| `ejdic-hand-txt.zip` | [EJDict](https://github.com/kujirahand/EJDict) v2.0.1, English to Japanese | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `SHA256SUMS` | Each file's SHA-256 | |
 
-The [snapshot workflow](.github/workflows/snapshot.yml) fetches them on the first of each month, and whenever it is run by hand. It checks every file but JMdict and Jiten's list against its SHA-256 in [`pinned.sha256`](pinned.sha256), the CEFR-J Wordlist before deriving from it, and that Jiten's list starts with its header. It publishes nothing when that day's JMdict already has a release. Releases from `upstream-2026.10.29` carry Princeton WordNet, those after it Jiten's list, and those after `upstream-2026.10.30` the wordfreq, BNC, CEFR, JLPT and NGSL files.
+The [snapshot workflow](.github/workflows/snapshot.yml) fetches them on the first of each month, and whenever it is run by hand. It checks every file but JMdict, Jiten's list and CC-CEDICT against its SHA-256 in [`pinned.sha256`](pinned.sha256), the CEFR-J Wordlist before deriving from it, that Jiten's list starts with its header, and that CC-CEDICT's header still names the format and licence Kotoiro relies on. It publishes nothing when that day's JMdict already has a release. Releases from `upstream-2026.10.29` carry Princeton WordNet, those after it Jiten's list, and those after `upstream-2026.10.30` the wordfreq, BNC, CEFR, JLPT and NGSL files, and CC-CEDICT, Unihan and EJDict.
 
 ## Attribution
 
@@ -37,5 +40,8 @@ The [snapshot workflow](.github/workflows/snapshot.yml) fetches them on the firs
 - The Octanove Vocabulary Profile C1/C2 is made by [Octanove Labs](http://www.octanove.com/).
 - The JLPT lists are compiled by [Jonathan Waller](http://www.tanos.co.uk/jlpt/), with JMdict entry numbers added by stephenmk. The JLPT publishes no word lists: these are his reconstruction.
 - The New General Service List and the New Academic Word List are by Browne, C., Culligan, B., and Phillips, J.; the TOEIC Service List and the Business Service List by Browne, C. and Culligan, B.
+- CC-CEDICT is made by its [contributors](https://cc-cedict.org/wiki/) and published by [MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict), and builds on CEDICT, Copyright (C) 1997, 1998 Paul Andrew Denisowski.
+- The Unihan database is © Unicode, Inc., and is used under the [Unicode License v3](https://www.unicode.org/license.txt). Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+- EJDict (ejdict-hand) is kept by [kujirahand](https://kujirahand.com/web-tools/EJDictFreeDL.php), with corrections from its users, and starts from `ejdic`, an English–Japanese dictionary file once given free to schools.
 
 Each file stays under its own licence; the snapshots change nothing in them, and the derived list keeps its original's terms and credits it.

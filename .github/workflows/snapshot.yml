@@ -15,8 +15,8 @@ concurrency:
 permissions:
   contents: write
 
-# Every file but JMdict's and Jiten's is pinned by its SHA-256 in pinned.sha256, under the name it
-# is released as. A new version gets a new pin.
+# Every file but JMdict's, Jiten's and CC-CEDICT's is pinned by its SHA-256 in pinned.sha256, under
+# the name it is released as. A new version gets a new pin.
 env:
   # JMdict, English only. The EDRDG publishes a new file at this one URL every day and keeps no
   # older ones, so it can't be pinned: each release is the record of one day's file.
@@ -46,6 +46,14 @@ env:
   JLPT_URL: https://raw.githubusercontent.com/stephenmk/yomitan-jlpt-vocab/b062d4e38c4bdd0950ae1d4ec55f04b176182e03/original_data
   # The NGSL family's word lists, NGSL 1.2, NAWL 1.2, TSL 1.2 and BSL 1.20.
   NGSL_URL: https://www.newgeneralservicelist.com/s
+  # CC-CEDICT, Chinese to English. MDBG publishes a new file at this one URL every day and keeps no
+  # older ones, so like JMdict it can't be pinned: its header says which day's it is.
+  CEDICT_URL: https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
+  # Unicode's Unihan database, pinned by version: how often each reading of a Chinese character
+  # is used, and its usual reading, for choosing which of CC-CEDICT's entries comes first.
+  UNIHAN_URL: https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip
+  # EJDict, English to Japanese, pinned by release.
+  EJDICT_URL: https://github.com/kujirahand/EJDict/releases/download/v2.0.1/ejdic-hand-txt.zip
 
 jobs:
   snapshot:
@@ -80,6 +88,10 @@ jobs:
           for list in NGSL_12_stats NAWL_12_lemmatized_for_teaching TSL_12_stats BSL_120_stats; do
             fetch "$list.csv" "$NGSL_URL/$list.csv"
           done
+          cedict=${CEDICT_URL##*/}
+          fetch "$cedict" "$CEDICT_URL"
+          fetch "${UNIHAN_URL##*/}" "$UNIHAN_URL"
+          fetch "${EJDICT_URL##*/}" "$EJDICT_URL"
           sha256sum -c --quiet ../pinned.sha256
           gzip -t JMdict_e.gz
           # Jiten's list has no SHA-256 to check, but its header shows it is the list.
@@ -87,6 +99,17 @@ jobs:
             echo "jiten_freq_global.csv doesn't start with Jiten's header" >&2
             exit 1
           fi
+          # Nor has CC-CEDICT, but its header shows it is still in the format Kotoiro reads, under
+          # the same licence.
+          gzip -t "$cedict"
+          header=$(gzip -dc "$cedict" | grep '^#! ' | tr -d '\r')
+          for line in '#! version=1' '#! format=ts' '#! charset=UTF-8' \
+            '#! license=https://creativecommons.org/licenses/by-sa/4.0/'; do
+            if ! grep -qxF -- "$line" <<< "$header"; then
+              echo "$cedict's header lacks '$line'" >&2
+              exit 1
+            fi
+          done
           python3 -I ../scripts/cefrj.py "$cefrj" > cefrj-1.6.tsv
           mv "$cefrj" ..
           sha256sum -- * > ../SHA256SUMS
@@ -107,6 +130,8 @@ jobs:
             exit 0
           fi
           cefrj=${CEFRJ_URL##*/}
+          cedict=${CEDICT_URL##*/}
+          cedict_date=$(gzip -dc "out/$cedict" | grep '^#! date=' | tr -d '\r' | cut -d= -f2 | cut -dT -f1)
           cat > notes.md <<EOF
           Each upstream file, unchanged but for one derived list:
 
@@ -121,6 +146,9 @@ jobs:
           - \`jlpt-n5.csv\` to \`jlpt-n1.csv\`: [Jonathan Waller](http://www.tanos.co.uk/jlpt/)'s JLPT lists, under Creative Commons BY, with JMdict entry numbers by [stephenmk/yomitan-jlpt-vocab](https://github.com/stephenmk/yomitan-jlpt-vocab), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
           - \`NGSL_12_stats.csv\`, \`NAWL_12_lemmatized_for_teaching.csv\`: the [New General Service List](https://www.newgeneralservicelist.com/new-general-service-list) and the [New Academic Word List](https://www.newgeneralservicelist.com/new-academic-word-list) 1.2 by Browne, C., Culligan, B., and Phillips, J., [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
           - \`TSL_12_stats.csv\`, \`BSL_120_stats.csv\`: the [TOEIC Service List](https://www.newgeneralservicelist.com/toeic-service-list) 1.2 and the [Business Service List](https://www.newgeneralservicelist.com/business-service-list) 1.20 by Browne, C. and Culligan, B., [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`$cedict\`: [CC-CEDICT](https://cc-cedict.org/wiki/) of $cedict_date, by its contributors, published by [MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+          - \`${UNIHAN_URL##*/}\`: the [Unihan database](https://www.unicode.org/reports/tr38/) of Unicode 18.0.0, © Unicode, Inc., under the [Unicode License v3](https://www.unicode.org/license.txt)
+          - \`${EJDICT_URL##*/}\`: [EJDict](https://github.com/kujirahand/EJDict) v2.0.1 by kujirahand, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 
           \`\`\`
           $(cat out/SHA256SUMS)
