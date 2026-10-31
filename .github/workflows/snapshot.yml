@@ -119,7 +119,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          created=$(gzip -dc out/JMdict_e.gz | grep -m1 -o 'JMdict created: [0-9-]*' | cut -d' ' -f3)
+          # Read JMdict to the end: stopping at the first match leaves gzip writing to a closed
+          # pipe, which it reports as "Broken pipe" here, where Actions ignores SIGPIPE.
+          created=$(gzip -dc out/JMdict_e.gz | awk '!created && match($0, /JMdict created: [0-9-]+/) {
+            created = substr($0, RSTART + 16, RLENGTH - 16)
+          } END { print created }')
           if [ -z "$created" ]; then
             echo "JMdict_e.gz says nothing of when it was created" >&2
             exit 1
